@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ball Runner Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #f0f0f0;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    #game {
+      position: relative;
+      width: 600px;
+      height: 200px;
+      background: #fff;
+      overflow: hidden;
+      border: 2px solid #333;
+    }
+    #ball {
+      position: absolute;
+      bottom: 0;
+      left: 50px;
+      width: 40px;
+      height: 50px;
+      overflow: hidden;
+      z-index: 2;
+    }
+    #ball img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #trailBall {
+      position: absolute;
+      bottom: 0;
+      left: 5px;
+      width: 50px;
+      height: 50px;
+      overflow: hidden;
+      z-index: 4;
+      transition: bottom 0.1s ease-out;
+    }
+    #trailBall img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .obstacle {
+      position: absolute;
+      bottom: 0;
+      width: 20px;
+      height: 40px;
+      right: -40px;
+      overflow: hidden;
+      z-index: 3;
+    }
+    .obstacle img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #score, #highScore {
+      position: absolute;
+      top: 10px;
+      font-size: 18px;
+      z-index: 10;
+    }
+    #score { right: 10px; }
+    #highScore { left: 10px; }
+    #gameOverScreen {
+      display: none;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      font-size: 24px;
+      text-align: center;
+      padding-top: 70px;
+      z-index: 20;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    #gameOverScreen button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 5px;
+    }
+    #startScreen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 20;
+    }
+    #startScreen button {
+      padding: 15px 30px;
+      font-size: 22px;
+      cursor: pointer;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 6px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      transition: background 0.3s;
+    }
+    #startScreen button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="ball">
+      <img src="running.gif" alt="running" />
+    </div>
+    <div id="trailBall">
+      <img src="trail.gif" alt="trailing ball" />
+    </div>
+
+    <div id="score">Score: 0</div>
+    <div id="highScore">High Score: 0</div>
+
+    <div id="gameOverScreen">
+      <div id="finalScore">Your Score: 0</div>
+      <button id="restartBtn">Restart Game</button>
+    </div>
+
+    <div id="startScreen">
+      <button id="startBtn">Start Game</button>
+    </div>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const ball = document.getElementById('ball');
+    const trailBall = document.getElementById('trailBall');
+    const scoreEl = document.getElementById('score');
+    const highScoreEl = document.getElementById('highScore');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScoreEl = document.getElementById('finalScore');
+    const restartBtn = document.getElementById('restartBtn');
+    const startScreen = document.getElementById('startScreen');
+    const startBtn = document.getElementById('startBtn');
+
+    const jumpSound = new Audio('jumping.wav');
+    const gameOverSound = new Audio('gameOver.wav');
+    const bgMusic = new Audio('bgmusic.mp3');
+    bgMusic.loop = true;
+
+    let jumping = false;
+    let position = 0;
+    let velocity = 0;
+    const gravity = -1;
+    let score = 0;
+    let gameSpeed = 5;
+    let gameOver = false;
+    let gameStarted = false;
+    let obstacles = [];
+
+    let highScore = localStorage.getItem('highScore') ? parseInt(localStorage.getItem('highScore')) : 0;
+    highScoreEl.textContent = 'High Score: ' + highScore;
+
+    let trailPosition = 0;
+
+    function startGame() {
+      gameStarted = true;
+      gameOver = false;
+      jumping = false;
+      position = 0;
+      velocity = 0;
+      score = 0;
+      gameSpeed = 5;
+      trailPosition = 0;
+
+      scoreEl.textContent = 'Score: 0';
+
+      obstacles.forEach(obs => {
+        if (obs.element.parentNode) {
+          obs.element.parentNode.removeChild(obs.element);
+        }
+      });
+      obstacles = [];
+
+      startScreen.style.display = 'none';
+      gameOverScreen.style.display = 'none';
+
+      bgMusic.currentTime = 0;
+      bgMusic.play();
+
+      generateObstacle();
+      gameLoop();
+    }
+
+    startBtn.addEventListener('click', startGame);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.keyCode === 32 && !jumping && !gameOver && gameStarted) {
+        jump();
+      }
+    });
+
+    document.addEventListener('click', () => {
+      if (!jumping && !gameOver && gameStarted) jump();
+    });
+
+    function jump() {
+      jumping = true;
+      velocity = 18;
+      jumpSound.currentTime = 0;
+      jumpSound.play();
+    }
+
+    function applyGravity() {
+      if (!gameStarted || gameOver) return;
+
+      velocity += gravity;
+      position += velocity;
+
+      if (position <= 0) {
+        position = 0;
+        jumping = false;
+        velocity = 0;
+      }
+
+      ball.style.bottom = position + 'px';
+    }
+
+    function generateObstacle() {
+      if (!gameStarted || gameOver) return;
+
+      const obstacle = document.createElement('div');
+      obstacle.classList.add('obstacle');
+
+      const img = document.createElement('img');
+      img.src = 'giphy.gif';
+      img.alt = 'Obstacle';
+
+      obstacle.appendChild(img);
+      game.appendChild(obstacle);
+
+      let obstacleRight = -40;
+      obstacle.style.right = obstacleRight + 'px';
+
+      obstacles.push({element: obstacle, position: obstacleRight});
+
+      setTimeout(generateObstacle, Math.random() * 1000 + 500);
+    }
+
+    function moveObstacles() {
+      if (!gameStarted || gameOver) return;
+
+      obstacles.forEach((obs, index) => {
+        obs.position += gameSpeed;
+        obs.element.style.right = obs.position + 'px';
+
+        let obstacleLeftEdge = game.offsetWidth - obs.position;
+        let ballBottom = parseInt(window.getComputedStyle(ball).getPropertyValue('bottom'));
+
+        if (obs.position > game.offsetWidth) {
+          if (obs.element.parentNode) {
+            obs.element.parentNode.removeChild(obs.element);
+          }
+          obstacles.splice(index, 1);
+          score++;
+          scoreEl.textContent = 'Score: ' + score;
+
+          if (score === 20) gameSpeed = 6;
+          else if (score === 50) gameSpeed = 9;
+          else if (score === 100) gameSpeed = 15;
+        }
+
+        if (obstacleLeftEdge > 50 && obstacleLeftEdge < 80 && ballBottom < 40) {
+          endGame();
+        }
+      });
+    }
+
+    function updateTrailBall() {
+      trailPosition += (position - trailPosition) * 0.1;
+      trailBall.style.bottom = trailPosition + 'px';
+    }
+
+    function endGame() {
+      gameOver = true;
+      finalScoreEl.textContent = 'Your Score: ' + score;
+
+      gameOverSound.play();
+      bgMusic.pause();
+
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('highScore', highScore);
+        highScoreEl.textContent = 'High Score: ' + highScore;
+      }
+
+      gameOverScreen.style.display = 'flex';
+    }
+
+    restartBtn.addEventListener('click', startGame);
+
+    function gameLoop() {
+      if (gameOver) return;
+      applyGravity();
+      moveObstacles();
+      updateTrailBall();
+      requestAnimationFrame(gameLoop);
+    }
+  </script>
+</body>
+</html>
